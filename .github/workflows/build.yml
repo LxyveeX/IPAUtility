@@ -1,0 +1,127 @@
+name: Build IPAUtility Test IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Create IPAUtility test project
+        run: |
+          mkdir -p App
+
+          cat > project.yml <<'PROJECT_YAML'
+          name: IPAUtility
+
+          options:
+            bundleIdPrefix: com.lxyvee
+
+          targets:
+            IPAUtility:
+              type: application
+              platform: iOS
+              deploymentTarget: "16.0"
+
+              sources:
+                - App
+
+              settings:
+                base:
+                  PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility
+                  PRODUCT_NAME: IPAUtility
+                  TARGETED_DEVICE_FAMILY: "1,2"
+                  SWIFT_VERSION: "5.0"
+                  GENERATE_INFOPLIST_FILE: YES
+                  INFOPLIST_KEY_CFBundleDisplayName: "IPA Utility"
+                  INFOPLIST_KEY_UILaunchScreen_Generation: YES
+                  INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+
+              scheme: {}
+          PROJECT_YAML
+
+          cat > App/IPAUtilityApp.swift <<'SWIFT'
+          import SwiftUI
+
+          @main
+          struct IPAUtilityApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      VStack(spacing: 18) {
+                          Image(systemName: "shippingbox.fill")
+                              .font(.system(size: 60))
+
+                          Text("IPA Utility")
+                              .font(.largeTitle)
+                              .bold()
+
+                          Text("GitHub 云端编译测试成功")
+                              .font(.headline)
+
+                          Text("iPadOS 16.0+")
+                              .foregroundStyle(.secondary)
+                      }
+                      .padding()
+                  }
+              }
+          }
+          SWIFT
+
+          xcodegen generate
+
+      - name: Build unsigned iOS app
+        run: |
+          xcodebuild \
+            -project IPAUtility.xcodeproj \
+            -scheme IPAUtility \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/IPAUtility.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: IPAUtility.app was not generated."
+            exit 1
+          fi
+
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/
+
+          zip -qry IPAUtility-Unsigned.ipa Payload
+
+          echo "=============================="
+          echo "IPA generated successfully:"
+          ls -lh IPAUtility-Unsigned.ipa
+          echo "=============================="
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPAUtility-Unsigned
+          path: IPAUtility-Unsigned.ipa
+          if-no-files-found: error
