@@ -71,3 +71,9 @@ xcodegen generate
 ZIPFoundation 0.9.20 已随工程附带，MIT 许可证位于 `Vendor/ZIPFoundation/LICENSE`。固定上游提交：`22787ffb59de99e5dc1fbfe80b19c97a904ad48d`。
 
 参考：[Apple 缩略图扩展文档](https://developer.apple.com/documentation/quicklookthumbnailing/providing-thumbnails-of-your-custom-file-types)。
+
+## 1.1 真机复测反馈（待排查）
+
+用户在 iPadOS 16.7 安装 1.1 后反馈：后台仍为默认图标，IPA 文件缩略图未出现，文件和文件夹选择器的确认按钮都没有作用。现有 15 项测试覆盖模型、回调函数和系统缩略图请求；没有覆盖真实选择界面的点击流程，也没有验证万能签重新签名后的安装结果。当前不能把这些测试记作上述三个问题已解决。
+
+已调整独立图标声明顺序，让大尺寸图片优先，避免按列表第一项取图的预览器使用 20 pt 小图。尚未发布新安装包；下一步需要对比用户实际安装的已签名 IPA 中的身份、签名权限、主程序与扩展配置，并查看卡住的选择界面。万能签原安装保持不动。

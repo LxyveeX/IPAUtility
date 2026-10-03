@@ -143,10 +143,10 @@
 		<dict>
 			<key>CFBundleIconFiles</key>
 			<array>
-				<string>Icon20</string>
-				<string>Icon29</string>
-				<string>Icon40</string>
 				<string>Icon60</string>
+				<string>Icon40</string>
+				<string>Icon29</string>
+				<string>Icon20</string>
 			</array>
 		</dict>
 	</dict>
@@ -156,12 +156,12 @@
 		<dict>
 			<key>CFBundleIconFiles</key>
 			<array>
-				<string>Icon20</string>
-				<string>Icon29</string>
-				<string>Icon40</string>
-				<string>Icon60</string>
-				<string>Icon76</string>
 				<string>Icon83.5</string>
+				<string>Icon76</string>
+				<string>Icon60</string>
+				<string>Icon40</string>
+				<string>Icon29</string>
+				<string>Icon20</string>
 			</array>
 		</dict>
 	</dict>
