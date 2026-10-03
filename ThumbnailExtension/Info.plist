@@ -32,6 +32,7 @@
 			<array>
 				<string>com.apple.itunes.ipa</string>
 				<string>com.lxyvee.ipautility.check</string>
+				<string>sign.wnqapp.com.ipa</string>
 			</array>
 			<key>QLThumbnailMinimumDimension</key>
 			<integer>0</integer>

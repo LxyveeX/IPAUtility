@@ -70,6 +70,7 @@ enum FileOperations {
 final class LibraryModel: ObservableObject {
     @Published var items: [IPAItem] = []
     @Published var folder: URL?
+    @Published private(set) var sourceFiles: [URL] = []
     @Published var loading = false
     @Published var busy = false
     @Published var progress = ""
@@ -83,10 +84,18 @@ final class LibraryModel: ObservableObject {
     @Published var autoRename: Bool { didSet { UserDefaults.standard.set(autoRename, forKey: "autoRename") } }
     @Published var recursive: Bool { didSet { UserDefaults.standard.set(recursive, forKey: "recursive") } }
     private var accessGranted = false
+    private var fileScopes: [URL] = []
     private var scanTask: Task<Void, Never>?
     private var diagnosticRequest: QLThumbnailGenerator.Request?
     private var diagnosticToken = UUID()
     private var generation = UUID()
+    var hasSource: Bool { folder != nil || !sourceFiles.isEmpty }
+    var suggestedFolder: URL? { sourceFiles.first?.deletingLastPathComponent() ?? folder }
+
+    func canRename(_ url: URL) -> Bool {
+        guard let folder else { return false }
+        return url.standardizedFileURL.path.hasPrefix(folder.standardizedFileURL.path + "/")
+    }
 
     init() {
         UserDefaults.standard.register(defaults: ["autoRename": true, "recursive": true])
@@ -104,14 +113,43 @@ final class LibraryModel: ObservableObject {
     }
 
     func chooseFolder(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            message = "未取得这个文件夹的访问权限。请改用“选择 IPA 文件”，或在“浏览”中进入文件夹后点“打开”。"
+            return
+        }
         scanTask?.cancel()
         generation = UUID()
         if let old = folder, accessGranted { old.stopAccessingSecurityScopedResource() }
-        accessGranted = url.startAccessingSecurityScopedResource()
+        releaseFileScopes()
+        sourceFiles = []
+        accessGranted = scoped
         folder = url
         selected = nil; items = []; undoRecords = []
         saveBookmark(url)
         refresh()
+    }
+
+    func chooseFiles(_ urls: [URL], openFirst: Bool = false) {
+        let valid = Array(Set(urls.filter { $0.pathExtension.lowercased() == "ipa" })).sorted { $0.path < $1.path }
+        guard !valid.isEmpty else { message = "没有选中 IPA，请选择以 .ipa 结尾的文件。"; return }
+        scanTask?.cancel(); generation = UUID()
+        // Acquire the new grants before releasing any previous grants for the same URLs.
+        let scopes = valid.filter { $0.startAccessingSecurityScopedResource() }
+        if let old = folder, accessGranted { old.stopAccessingSecurityScopedResource() }
+        releaseFileScopes(); fileScopes = scopes
+        accessGranted = false; folder = nil; sourceFiles = valid
+        UserDefaults.standard.removeObject(forKey: "folderBookmark")
+        selected = nil; items = []; undoRecords = []
+        pendingOpen = openFirst ? valid.first : nil
+        if valid.count != urls.count { message = "已选中 \(valid.count) 个 IPA，其他类型的文件已忽略。" }
+        refresh()
+    }
+
+    private func releaseFileScopes() {
+        for url in fileScopes { url.stopAccessingSecurityScopedResource() }
+        fileScopes = []
     }
 
     private func saveBookmark(_ url: URL) {
@@ -120,18 +158,23 @@ final class LibraryModel: ObservableObject {
     }
 
     func refresh() {
-        guard let root = folder, !busy else { return }
+        guard hasSource, !busy else { return }
+        let root = folder
+        let files = sourceFiles
         scanTask?.cancel()
         let token = UUID(); generation = token
         let recursive = self.recursive
-        loading = true; progress = "正在读取文件夹…"
+        loading = true; progress = root == nil ? "正在读取选中的 IPA…" : "正在读取文件夹…"
         items = []
         scanTask = Task {
             // Each scan holds its own access until background reads have finished.
-            let scoped = root.startAccessingSecurityScopedResource()
-            defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+            let scopes = ([root].compactMap { $0 } + files).filter { $0.startAccessingSecurityScopedResource() }
+            defer { for url in scopes { url.stopAccessingSecurityScopedResource() } }
             do {
-                let urls = try await Task.detached(priority: .userInitiated) { try FileOperations.list(root, recursively: recursive) }.value
+                let urls: [URL]
+                if let root {
+                    urls = try await Task.detached(priority: .userInitiated) { try FileOperations.list(root, recursively: recursive) }.value
+                } else { urls = files }
                 for (index, url) in urls.enumerated() {
                     guard !Task.isCancelled, generation == token else { return }
                     progress = "正在读取 \(index + 1) / \(urls.count)"
@@ -156,7 +199,7 @@ final class LibraryModel: ObservableObject {
     func open(_ item: IPAItem) async {
         guard !busy, !loading else { return }
         selected = item
-        if autoRename, item.info != nil { await rename([item]) }
+        if autoRename, item.info != nil, canRename(item.url) { await rename([item]) }
     }
 
     func rename(_ batch: [IPAItem]) async {
@@ -167,6 +210,10 @@ final class LibraryModel: ObservableObject {
         var failures: [String] = []
         for (i, item) in batch.enumerated() {
             guard let info = item.info else { continue }
+            guard canRename(item.url) else {
+                failures.append("\(item.filename)：请先返回主页，点“定位并授权所在文件夹”。")
+                continue
+            }
             progress = "正在重命名 \(i+1) / \(batch.count)"
             do {
                 let newURL = try await Task.detached(priority: .userInitiated) {
@@ -213,8 +260,8 @@ final class LibraryModel: ObservableObject {
         if let root = folder, url.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/") {
             refresh(); return
         }
-        // A file URL grant does not grant rename access to its parent directory.
-        message = "请选择这个 IPA 所在的文件夹，授权后即可在原位置重命名。"
+        // Open the granted file immediately. Parent access remains a separate user grant.
+        chooseFiles([url], openFirst: true)
     }
 
     func createSamples() {
@@ -237,7 +284,13 @@ final class LibraryModel: ObservableObject {
         let token = UUID(); diagnosticToken = token
         let type = (try? url.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier) ?? "未知"
         let embedded = Bundle.main.builtInPlugInsURL.map { FileManager.default.fileExists(atPath: $0.appendingPathComponent("IPAThumbnail.appex").path) } ?? false
-        let header = "扩展文件：\(embedded ? "已包含" : "缺失，请在签名时保留扩展")\n文件类型：\(type)"
+        let plugin = Bundle.main.builtInPlugInsURL.flatMap { Bundle(url: $0.appendingPathComponent("IPAThumbnail.appex")) }
+        let config = plugin?.infoDictionary?["NSExtension"] as? [String: Any]
+        let attributes = config?["NSExtensionAttributes"] as? [String: Any]
+        let supported = attributes?["QLSupportedContentTypes"] as? [String] ?? []
+        let knownTypes = UTType.types(tag: "ipa", tagClass: .filenameExtension, conformingTo: nil).map(\.identifier)
+        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+        let header = "IPA 图标 \(version)\n扩展文件：\(embedded ? "已包含（是否能加载以请求结果为准）" : "缺失，请在签名时保留扩展")\n文件类型：\(type)\n类型匹配：\(supported.contains(type) ? "支持" : "尚未支持，请把检测结果发给开发者")\n已登记 IPA 类型：\(knownTypes.joined(separator: "、"))"
         diagnostic = header + "\n正在请求系统缩略图…"
         diagnosticImage = nil; checking = true
         let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 160, height: 160), scale: 2, representationTypes: .thumbnail)

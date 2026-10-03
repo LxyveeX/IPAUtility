@@ -62,6 +62,25 @@
 				</array>
 			</dict>
 		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>sign.wnqapp.com.ipa</string>
+			<key>UTTypeDescription</key>
+			<string>IPA 应用安装包（万能签兼容）</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.itunes.ipa</string>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ipa</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
@@ -91,10 +110,11 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
-			<string>Default</string>
+			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.apple.itunes.ipa</string>
+				<string>sign.wnqapp.com.ipa</string>
 			</array>
 		</dict>
 		<dict>
@@ -117,5 +137,33 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>Icon20</string>
+				<string>Icon29</string>
+				<string>Icon40</string>
+				<string>Icon60</string>
+			</array>
+		</dict>
+	</dict>
+	<key>CFBundleIcons~ipad</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>Icon20</string>
+				<string>Icon29</string>
+				<string>Icon40</string>
+				<string>Icon60</string>
+				<string>Icon76</string>
+				<string>Icon83.5</string>
+			</array>
+		</dict>
+	</dict>
 </dict>
 </plist>

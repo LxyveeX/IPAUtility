@@ -3,7 +3,9 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @EnvironmentObject var model: LibraryModel
-    @State private var folderPicker = false
+    @State private var picker: PickerKind?
+    @State private var pickedURLs: [URL] = []
+    @State private var pickedKind = PickerKind.files
     @State private var showHelp = false
     @State private var confirmBatch = false
     @State private var search = ""
@@ -16,14 +18,21 @@ struct LibraryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     hero
-                    if model.folder != nil {
+                    if model.hasSource {
                         HStack(spacing: 10) {
-                            Label(model.folder?.lastPathComponent ?? "", systemImage: "folder.fill").lineLimit(1)
+                            Label(model.folder?.lastPathComponent ?? "已选中的文件", systemImage: model.folder == nil ? "doc.on.doc" : "folder.fill").lineLimit(1)
                             Spacer()
                             Text("\(model.items.count) 个 IPA").foregroundStyle(.secondary)
                         }.font(.subheadline)
-                        Toggle("点击 App 时自动重命名", isOn: $model.autoRename)
-                            .font(.subheadline)
+                        if model.folder != nil {
+                            Toggle("点击 App 时自动重命名", isOn: $model.autoRename).font(.subheadline)
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("已获得这些 IPA 的读取权限。整理原文件名称时，请再授权所在文件夹。")
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                                Button { picker = .folder } label: { Label("定位并授权所在文件夹", systemImage: "folder") }
+                            }
+                        }
                         if model.loading || model.busy {
                             HStack { ProgressView(); Text(model.progress).font(.subheadline).foregroundStyle(.secondary) }
                         }
@@ -40,9 +49,14 @@ struct LibraryView: View {
                         }
                     } else {
                         emptyState(title: "把 IPA 整理得一目了然", subtitle: "选择“下载”中存放 IPA 的子文件夹。\n文件会保留在原位置。")
-                        Button { folderPicker = true } label: {
-                            Label("选择 IPA 文件夹", systemImage: "folder.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
+                        Button { picker = .files } label: {
+                            Label("选择 IPA 文件（可多选）", systemImage: "doc.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
                         }.buttonStyle(.borderedProminent).controlSize(.large)
+                        Button { picker = .folder } label: {
+                            Label("选择 IPA 文件夹", systemImage: "folder.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
+                        }.buttonStyle(.bordered).controlSize(.large)
+                        Text("文件夹选择器：先点“浏览”，进入目标文件夹，再点右上角“打开”。若无响应，可直接选择 IPA 文件。")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
                 }.padding(24).frame(maxWidth: 1200)
                     .frame(maxWidth: .infinity)
@@ -53,12 +67,14 @@ struct LibraryView: View {
             .refreshable { model.refresh() }
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button { folderPicker = true } label: { Image(systemName: "folder.badge.plus") }.accessibilityLabel("选择文件夹")
-                        .disabled(model.busy)
+                    Menu {
+                        Button { picker = .files } label: { Label("选择 IPA 文件（可多选）", systemImage: "doc.badge.plus") }
+                        Button { picker = .folder } label: { Label("选择 IPA 文件夹", systemImage: "folder.badge.plus") }
+                    } label: { Image(systemName: "plus.circle") }.accessibilityLabel("选择 IPA").disabled(model.busy)
                     Menu {
                         Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                         Button { confirmBatch = true } label: { Label("批量重命名当前列表", systemImage: "textformat.abc") }
-                            .disabled(model.items.isEmpty || model.busy || model.loading)
+                            .disabled(model.folder == nil || model.items.isEmpty || model.busy || model.loading)
                         Button { Task { await model.undo() } } label: { Label("撤销上次重命名", systemImage: "arrow.uturn.backward") }
                             .disabled(model.undoRecords.isEmpty || model.busy || model.loading)
                         Toggle("包含子文件夹", isOn: $model.recursive).disabled(model.busy || model.loading)
@@ -68,17 +84,27 @@ struct LibraryView: View {
                 }
             }
             .onChange(of: model.recursive) { _ in model.refresh() }
-            .sheet(isPresented: $folderPicker) { FolderPicker { model.chooseFolder($0) } }
+            .fullScreenCover(item: $picker, onDismiss: applySelection) { kind in
+                DocumentPicker(kind: kind, directory: model.suggestedFolder) { urls in
+                    pickedKind = kind; pickedURLs = urls; picker = nil
+                }.ignoresSafeArea()
+            }
             .sheet(isPresented: $showHelp) { HelpView().environmentObject(model) }
             .sheet(item: $model.selected) { item in ItemDetail(item: item).environmentObject(model) }
             .alert("提示", isPresented: Binding(get: { model.message != nil && model.selected == nil }, set: { if !$0 { model.message = nil } })) {
-                if model.pendingOpen != nil { Button("选择所在文件夹") { model.message = nil; folderPicker = true } }
                 Button("好", role: .cancel) { model.message = nil }
             } message: { Text(model.message ?? "") }
             .confirmationDialog("按 App 名称＋版本号重命名 \(filtered.filter { $0.info != nil }.count) 个文件？", isPresented: $confirmBatch, titleVisibility: .visible) {
                 Button("开始重命名") { let batch = filtered; Task { await model.rename(batch) } }
             } message: { Text("例如：微信 8.0.60.ipa。同名文件自动加序号；可以撤销本次操作。") }
         }
+    }
+
+    private func applySelection() {
+        let urls = pickedURLs; pickedURLs = []
+        guard !urls.isEmpty else { return }
+        if pickedKind == .folder, let first = urls.first { model.chooseFolder(first) }
+        else { model.chooseFiles(urls) }
     }
 
     private var hero: some View {
@@ -156,7 +182,11 @@ struct ItemDetail: View {
                         row("当前名称", current.filename)
                         row("标准名称", info.suggestedName)
                         row("大小", ByteCountFormatter.string(fromByteCount: current.size, countStyle: .file))
-                        Button { Task { await model.rename([current]) } } label: { Label("按名称＋版本号重命名", systemImage: "textformat.abc") }.disabled(model.busy)
+                        if model.canRename(current.url) {
+                            Button { Task { await model.rename([current]) } } label: { Label("按名称＋版本号重命名", systemImage: "textformat.abc") }.disabled(model.busy)
+                        } else {
+                            Text("原位置重命名：返回主页，点“定位并授权所在文件夹”。").font(.footnote).foregroundStyle(.secondary)
+                        }
                         if !model.undoRecords.isEmpty {
                             Button { Task { await model.undo() } } label: { Label("撤销上次重命名", systemImage: "arrow.uturn.backward") }.disabled(model.busy)
                         }
@@ -175,6 +205,9 @@ struct ItemDetail: View {
                             .disabled(model.checking || model.busy)
                         if model.checking { ProgressView() }
                         if !model.diagnostic.isEmpty { Text(model.diagnostic).font(.footnote).textSelection(.enabled) }
+                        if !model.diagnostic.isEmpty {
+                            ShareLink(item: model.diagnostic) { Label("分享检测结果", systemImage: "square.and.arrow.up") }
+                        }
                         if let image = model.diagnosticImage { Image(uiImage: image).resizable().scaledToFit().frame(width: 100, height: 100) }
                     }
                 }
@@ -195,21 +228,37 @@ struct ItemDetail: View {
     }
 }
 
-struct FolderPicker: UIViewControllerRepresentable {
-    let selected: (URL) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(selected: selected) }
+enum PickerKind: String, Identifiable {
+    case folder, files
+    var id: String { rawValue }
+}
+
+struct DocumentPicker: UIViewControllerRepresentable {
+    let kind: PickerKind
+    let directory: URL?
+    let completed: ([URL]) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(completed: completed) }
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
+        // .data keeps IPA files selectable even when another app registers a different UTI.
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: kind == .folder ? [.folder] : [.data], asCopy: false)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = kind == .files
+        picker.shouldShowFileExtensions = true
+        picker.directoryURL = directory
         return picker
     }
     func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let selected: (URL) -> Void
-        init(selected: @escaping (URL) -> Void) { self.selected = selected }
+        let completed: ([URL]) -> Void
+        private var finished = false
+        init(completed: @escaping ([URL]) -> Void) { self.completed = completed }
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            if let url = urls.first { selected(url) }
+            finish(urls)
+        }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
+        private func finish(_ urls: [URL]) {
+            guard !finished else { return }
+            finished = true; completed(urls)
         }
     }
 }
@@ -226,18 +275,20 @@ struct HelpView: View {
                     Text("签名时请保留并签名 IPAThumbnail.appex。若签名工具有“移除插件 / 移除扩展”选项，请关闭。")
                 }
                 Section("自动整理名称") {
+                    Text("文件夹选不了时，先用“选择 IPA 文件（可多选）”。立即读取图标和信息；主页的“定位并授权所在文件夹”会尝试定位到第一个 IPA 的目录，再由你确认授权。")
                     Text("选择“下载”下的 IPA 文件夹。开启“点击 App 时自动重命名”后，点击本 App 中的应用卡片会改为“App 名称 版本号.ipa”。")
                     Text("通过系统“打开方式”交给本 App 的 IPA，也会在已授权的文件夹内执行同样操作。系统选择其他打开方式时，需要手动选择 IPA 图标。")
                     Text("同名文件加 (2)、(3) 等序号；文件内容不变。右上角菜单可批量整理、撤销上次重命名。")
                 }
                 Section("图标没有出现时") {
+                    Text("已适配万能签登记的 IPA 文件类型。若还显示默认图标，请选择一个 IPA，在详情中检测系统缩略图并分享检测结果。")
                     Text("先在 App 详情中检测系统缩略图。然后退出“文件”重新打开，或用下面的新样本排除旧缓存。")
                     Button { model.createSamples(); dismiss() } label: { Label("生成缩略图测试文件", systemImage: "doc.badge.plus") }
                     Text(".ipa 与 .ipacheck 是同一内容的两种扩展名。两者均应显示蓝色 App 图标；仅 .ipacheck 正常时，说明 IPA 文件类型关联可能被其他应用占用。测试文件仅用于查看图标。")
                     Text("部分 IPA 将图标放在特殊的 Assets.car 资源中，系统可能无法读取；详情会显示具体图标来源。")
                 }
                 Section {
-                    Text("IPA 图标 1.0 · iPadOS 16+").font(.footnote)
+                    Text("IPA 图标 1.1 · iPadOS 16+").font(.footnote)
                     Text("图标与应用信息在本机读取。IPA 内容不会上传。ZIP 读取使用 ZIPFoundation 0.9.20（MIT）。").font(.footnote).foregroundStyle(.secondary)
                 }
             }.navigationTitle("使用说明").navigationBarTitleDisplayMode(.inline)

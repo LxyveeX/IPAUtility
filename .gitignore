@@ -7,3 +7,4 @@ IPAUtility-Unsigned.ipa
 *.log
 .DS_Store
 __pycache__/
+App/IconFiles/

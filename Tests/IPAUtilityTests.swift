@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import QuickLookThumbnailing
+import UniformTypeIdentifiers
 @testable import IPAUtility
 
 final class IPAUtilityTests: XCTestCase {
@@ -89,15 +90,29 @@ final class IPAUtilityTests: XCTestCase {
         XCTAssertEqual(config["NSExtensionPointIdentifier"] as? String, "com.apple.quicklook.thumbnail")
         let attributes = try XCTUnwrap(config["NSExtensionAttributes"] as? [String:Any])
         XCTAssertTrue((attributes["QLSupportedContentTypes"] as? [String] ?? []).contains("com.apple.itunes.ipa"))
+        XCTAssertTrue((attributes["QLSupportedContentTypes"] as? [String] ?? []).contains("sign.wnqapp.com.ipa"))
     }
 
     func testSystemGeneratesRealIPAThumbnail() throws {
+        try verifySystemThumbnail(contentType: nil)
+    }
+
+    func testSystemGeneratesWanNengQianIPAThumbnail() throws {
+        try verifySystemThumbnail(contentType: XCTUnwrap(UTType("sign.wnqapp.com.ipa")))
+    }
+
+    func testSystemGeneratesAppleIPAThumbnail() throws {
+        try verifySystemThumbnail(contentType: XCTUnwrap(UTType("com.apple.itunes.ipa")))
+    }
+
+    private func verifySystemThumbnail(contentType: UTType?) throws {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let url = documents.appendingPathComponent("thumbnail-integration-\(UUID().uuidString).ipa")
         try FileManager.default.copyItem(at: fixture("localized.ipa"), to: url)
         defer { try? FileManager.default.removeItem(at: url) }
         let done = expectation(description: "Quick Look invokes the IPA thumbnail provider")
         let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 64, height: 64), scale: 1, representationTypes: .thumbnail)
+        if let contentType { request.contentType = contentType }
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, error in
             defer { done.fulfill() }
             XCTAssertNil(error)
@@ -108,12 +123,73 @@ final class IPAUtilityTests: XCTestCase {
             XCTAssertGreaterThan(Int(rgba[center+2]), Int(rgba[center])+40, "Expected the fixture's blue icon")
             XCTAssertGreaterThan(rgba[center+3], 240)
             let attachment = XCTAttachment(image: image)
-            attachment.name = "System-generated IPA thumbnail"
+            attachment.name = "System-generated IPA thumbnail: \(contentType?.identifier ?? "automatic")"
             attachment.lifetime = .keepAlways
             self.add(attachment)
         }
         wait(for: [done], timeout: 40)
         QLThumbnailGenerator.shared.cancel(request)
+    }
+
+    @MainActor
+    func testDirectFileSelectionDoesNotGrantParentAccess() async throws {
+        UserDefaults.standard.removeObject(forKey: "folderBookmark")
+        let model = LibraryModel()
+        let source = try fixture("localized.ipa")
+        model.chooseFiles([source])
+        for _ in 0..<200 where model.loading { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertFalse(model.loading)
+        let item = try XCTUnwrap(model.items.first)
+        XCTAssertNotNil(item.info?.icon)
+        XCTAssertNil(model.folder)
+        XCTAssertFalse(model.canRename(source))
+        XCTAssertEqual(model.suggestedFolder, source.deletingLastPathComponent())
+        await model.open(item)
+        XCTAssertEqual(model.selected?.url, source)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertTrue(model.undoRecords.isEmpty)
+    }
+
+    @MainActor
+    func testOpeningAnExternalIPAImmediatelyShowsDetails() async throws {
+        UserDefaults.standard.removeObject(forKey: "folderBookmark")
+        let model = LibraryModel()
+        let source = try fixture("localized.ipa")
+        model.receive(source)
+        for _ in 0..<200 where model.loading { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(model.selected?.url, source)
+        XCTAssertNotNil(model.selected?.info?.icon)
+        XCTAssertNil(model.pendingOpen)
+        XCTAssertNil(model.message)
+    }
+
+    @MainActor
+    func testPickerSelectionAndCancellationCompleteExactlyOnce() {
+        let controller = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
+        let url = FileManager.default.temporaryDirectory
+        var selections: [[URL]] = []
+        let selected = DocumentPicker.Coordinator { selections.append($0) }
+        selected.documentPicker(controller, didPickDocumentsAt: [url])
+        selected.documentPickerWasCancelled(controller)
+        XCTAssertEqual(selections, [[url]])
+        let cancelled = DocumentPicker.Coordinator { selections.append($0) }
+        cancelled.documentPickerWasCancelled(controller)
+        cancelled.documentPickerWasCancelled(controller)
+        XCTAssertEqual(selections, [[url], []])
+    }
+
+    func testSystemIconsExistAtSmallAndIPadSizes() throws {
+        for key in ["CFBundleIcons", "CFBundleIcons~ipad"] {
+            let icons = try XCTUnwrap(Bundle.main.infoDictionary?[key] as? [String: Any])
+            let primary = try XCTUnwrap(icons["CFBundlePrimaryIcon"] as? [String: Any])
+            XCTAssertNil(primary["CFBundleIconName"])
+            let files = try XCTUnwrap(primary["CFBundleIconFiles"] as? [String])
+            XCTAssertTrue(Set(["Icon20", "Icon29", "Icon40"]).isSubset(of: Set(files)))
+            for name in files {
+                let url = try XCTUnwrap(Bundle.main.url(forResource: name + "@2x", withExtension: "png"))
+                XCTAssertNotNil(IconDecoder.image(try Data(contentsOf: url)))
+            }
+        }
     }
 
     private func pixels(_ image: UIImage) throws -> [UInt8] {
