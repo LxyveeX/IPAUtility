@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import QuickLookThumbnailing
 @testable import IPAUtility
 
 final class IPAUtilityTests: XCTestCase {
@@ -88,6 +89,31 @@ final class IPAUtilityTests: XCTestCase {
         XCTAssertEqual(config["NSExtensionPointIdentifier"] as? String, "com.apple.quicklook.thumbnail")
         let attributes = try XCTUnwrap(config["NSExtensionAttributes"] as? [String:Any])
         XCTAssertTrue((attributes["QLSupportedContentTypes"] as? [String] ?? []).contains("com.apple.itunes.ipa"))
+    }
+
+    func testSystemGeneratesRealIPAThumbnail() throws {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let url = documents.appendingPathComponent("thumbnail-integration-\(UUID().uuidString).ipa")
+        try FileManager.default.copyItem(at: fixture("localized.ipa"), to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let done = expectation(description: "Quick Look invokes the IPA thumbnail provider")
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 64, height: 64), scale: 1, representationTypes: .thumbnail)
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, error in
+            defer { done.fulfill() }
+            XCTAssertNil(error)
+            XCTAssertEqual(representation?.type, .thumbnail)
+            guard let image = representation?.uiImage, let cg = image.cgImage,
+                  let rgba = try? self.pixels(image) else { XCTFail("No thumbnail image returned"); return }
+            let center = ((cg.height/2)*cg.width + cg.width/2)*4
+            XCTAssertGreaterThan(Int(rgba[center+2]), Int(rgba[center])+40, "Expected the fixture's blue icon")
+            XCTAssertGreaterThan(rgba[center+3], 240)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "System-generated IPA thumbnail"
+            attachment.lifetime = .keepAlways
+            self.add(attachment)
+        }
+        wait(for: [done], timeout: 40)
+        QLThumbnailGenerator.shared.cancel(request)
     }
 
     private func pixels(_ image: UIImage) throws -> [UInt8] {
