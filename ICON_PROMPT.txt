@@ -1,0 +1,7 @@
+Asset: IPAUtility app icon
+Generation: built-in image generation tool
+App assets: App/Assets.xcassets/AppIcon.appiconset
+Formatting: opaque RGB PNG; standard iPhone/iPad icon sizes generated from the selected artwork.
+
+Prompt:
+Use case: logo-brand. Create one polished native iPad app icon for an IPA file utility called IPAUtility. Square 1024x1024 production app-icon artwork, full bleed opaque square, NO rounded outer mask and no margins, iOS applies its own rounded corners. Deep midnight navy background with a subtle cobalt aura. Large simple beautifully crafted luminous cyan-blue open folder, with one pearlescent icy-white app tile emerging from it, tile showing a tiny tasteful four-square cyan application motif. Elegant Apple-quality material rendering, restrained soft translucent glass highlights on folder edges, smooth satin surfaces, clear bold silhouette readable at 40px, front view with just a little dimensional depth, balanced centered composition with subject occupying 72 percent of canvas. Sophisticated tool icon, clean geometry, no typography, no letters, no text, no logos, no watermark, no mockup, no surrounding device. Keep background rich dark blue edge-to-edge. The folder is broad, the app tile is substantial, minimal uncluttered design.

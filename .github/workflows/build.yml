@@ -1,127 +1,72 @@
-name: Build IPAUtility Test IPA
+name: Build IPAUtility
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/build.yml"
+    branches: [main, 'codex/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipautility-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: macos-15-intel
-
+    timeout-minutes: 35
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Show Xcode version
+      - uses: actions/checkout@v4
+      - name: Xcode version
         run: xcodebuild -version
-
       - name: Install XcodeGen
         run: brew install xcodegen
-
-      - name: Create IPAUtility test project
+      - name: Generate project
         run: |
-          mkdir -p App
-
-          cat > project.yml <<'PROJECT_YAML'
-          name: IPAUtility
-
-          options:
-            bundleIdPrefix: com.lxyvee
-
-          targets:
-            IPAUtility:
-              type: application
-              platform: iOS
-              deploymentTarget: "16.0"
-
-              sources:
-                - App
-
-              settings:
-                base:
-                  PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility
-                  PRODUCT_NAME: IPAUtility
-                  TARGETED_DEVICE_FAMILY: "1,2"
-                  SWIFT_VERSION: "5.0"
-                  GENERATE_INFOPLIST_FILE: YES
-                  INFOPLIST_KEY_CFBundleDisplayName: "IPA Utility"
-                  INFOPLIST_KEY_UILaunchScreen_Generation: YES
-                  INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-
-              scheme: {}
-          PROJECT_YAML
-
-          cat > App/IPAUtilityApp.swift <<'SWIFT'
-          import SwiftUI
-
-          @main
-          struct IPAUtilityApp: App {
-              var body: some Scene {
-                  WindowGroup {
-                      VStack(spacing: 18) {
-                          Image(systemName: "shippingbox.fill")
-                              .font(.system(size: 60))
-
-                          Text("IPA Utility")
-                              .font(.largeTitle)
-                              .bold()
-
-                          Text("GitHub 云端编译测试成功")
-                              .font(.headline)
-
-                          Text("iPadOS 16.0+")
-                              .foregroundStyle(.secondary)
-                      }
-                      .padding()
-                  }
-              }
-          }
-          SWIFT
-
+          python3 scripts/make_fixtures.py
           xcodegen generate
-
-      - name: Build unsigned iOS app
+      - name: Build unsigned app and thumbnail extension
         run: |
-          xcodebuild \
-            -project IPAUtility.xcodeproj \
-            -scheme IPAUtility \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            build
-
-      - name: Package unsigned IPA
+          set -o pipefail
+          xcodebuild -project IPAUtility.xcodeproj -scheme IPAUtility \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM='' build | tee build-device.log
+      - name: Run parser and rename tests
         run: |
-          APP_PATH="build/Build/Products/Release-iphoneos/IPAUtility.app"
-
-          if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: IPAUtility.app was not generated."
-            exit 1
-          fi
-
-          rm -rf Payload
-          mkdir Payload
-          cp -R "$APP_PATH" Payload/
-
+          set -o pipefail
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(x["udid"] for runtime,ds in d["devices"].items() if "iOS" in runtime for x in ds if "iPhone" in x["name"]))')
+          xcodebuild -project IPAUtility.xcodeproj -scheme IPAUtility \
+            -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO test | tee build-tests.log
+      - name: Package and check IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/IPAUtility.app Payload/
+          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' Payload/IPAUtility.app/PlugIns/IPAThumbnail.appex/Info.plist
           zip -qry IPAUtility-Unsigned.ipa Payload
-
-          echo "=============================="
-          echo "IPA generated successfully:"
-          ls -lh IPAUtility-Unsigned.ipa
-          echo "=============================="
-
+          python3 scripts/verify_package.py IPAUtility-Unsigned.ipa
+          shasum -a 256 IPAUtility-Unsigned.ipa > IPAUtility-SHA256.txt
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: IPAUtility-Unsigned
-          path: IPAUtility-Unsigned.ipa
+          path: |
+            IPAUtility-Unsigned.ipa
+            IPAUtility-SHA256.txt
           if-no-files-found: error
+          retention-days: 30
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Diagnostics
+          path: |
+            build-device.log
+            build-tests.log
+            TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,76 @@
+name: IPAUtility
+options:
+  bundleIdPrefix: com.lxyvee
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: zh-Hans
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    SUPPORTS_MACCATALYST: NO
+targets:
+  IPAUtility:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: [Info.plist]
+      - Shared
+      - path: Vendor/ZIPFoundation
+        excludes: [LICENSE]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility
+        PRODUCT_NAME: IPAUtility
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: IPAThumbnail
+        embed: true
+      - sdk: libz.tbd
+  IPAThumbnail:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ThumbnailExtension
+        excludes: [Info.plist]
+      - Shared
+      - path: Vendor/ZIPFoundation
+        excludes: [LICENSE]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility.thumbnail
+        INFOPLIST_FILE: ThumbnailExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: libz.tbd
+      - sdk: QuickLookThumbnailing.framework
+  IPAUtilityTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes: [Fixtures]
+      - path: Tests/Fixtures
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: IPAUtility
+schemes:
+  IPAUtility:
+    build:
+      targets:
+        IPAUtility: all
+    test:
+      targets: [IPAUtilityTests]
+      gatherCoverageData: false
