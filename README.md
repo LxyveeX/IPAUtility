@@ -36,14 +36,18 @@
 
 1. XcodeGen 生成 App、缩略图扩展和测试 target。
 2. 编译 iPhone/iPad 真机 Release 二进制。
-3. 在模拟器运行 8 项解析、CgBI、ZIP64、文件名和扩展打包配置测试。
+3. 在模拟器运行 9 项解析、CgBI、ZIP64、文件名、扩展配置和系统缩略图调用测试。
 4. 检查 IPA 确实包含扩展与正确 UTI，再上传 `IPAUtility-Unsigned` artifact。
 
 解压 artifact 得到 `IPAUtility-Unsigned.ipa`，按此前方式签名安装。
 
 ## 当前验证状态
 
-截至源代码准备阶段：已检查 Swift 语法树、plist / YAML、图标尺寸和样本 ZIP 完整性。**尚未进行 Xcode 编译、模拟器测试或 iPadOS 16.7 实机缩略图验证。** GitHub 接口可用后应首先运行 CI 并修复编译/测试结果，再交付正式 IPA。
+2026-10-03 已通过 Xcode 16.4 真机 Release 编译，9 项模拟器测试全部通过（0 失败），包括由系统 Quick Look 实际调用扩展生成 IPA 缩略图。最终 IPA 已检查 ARM64 真机二进制、iOS 16.0 最低版本、嵌入的缩略图扩展、UTI 和 SHA-256。
+
+构建记录：[Build IPAUtility #4](https://github.com/LxyveeX/IPAUtility/actions/runs/37125202958)。构建代码提交：`82d6c3cf65d4778102cdfa90d5168a0adc9e3174`。IPA SHA-256：`0fbf5c5560f37e7de51b8afc492b867a852206f8611f495008fe5e3327c59f2e`。
+
+iPadOS 16.7 上仍需按上面的步骤安装，验证实际签名工具保留扩展后的系统“文件”显示效果。
 
 ## 开发
 
