@@ -4,8 +4,6 @@ import UniformTypeIdentifiers
 struct LibraryView: View {
     @EnvironmentObject var model: LibraryModel
     @State private var picker: PickerKind?
-    @State private var pickedURLs: [URL] = []
-    @State private var pickedKind = PickerKind.files
     @State private var showHelp = false
     @State private var confirmBatch = false
     @State private var search = ""
@@ -89,9 +87,13 @@ struct LibraryView: View {
                 }
             }
             .onChange(of: model.recursive) { _ in model.refresh() }
-            .fullScreenCover(item: $picker, onDismiss: applySelection) { kind in
+            .fullScreenCover(item: $picker) { kind in
                 DocumentPicker(kind: kind, directory: model.suggestedFolder ?? model.localLibraryURL) { urls in
-                    pickedKind = kind; pickedURLs = urls; picker = nil
+                    // UIDocumentPicker may finish its own dismissal before SwiftUI
+                    // observes these state updates. Consume the delegate's URLs here,
+                    // rather than handing them through an onDismiss state snapshot.
+                    picker = nil
+                    applySelection(kind, urls: urls)
                 }.ignoresSafeArea()
             }
             .sheet(isPresented: $showHelp) { HelpView().environmentObject(model) }
@@ -105,11 +107,10 @@ struct LibraryView: View {
         }
     }
 
-    private func applySelection() {
-        let urls = pickedURLs; pickedURLs = []
+    private func applySelection(_ kind: PickerKind, urls: [URL]) {
         guard !urls.isEmpty else { return }
-        if pickedKind == .importFiles { Task { await model.importCopies(urls) } }
-        else if pickedKind == .folder, let first = urls.first { model.chooseFolder(first) }
+        if kind == .importFiles { Task { await model.importCopies(urls) } }
+        else if kind == .folder, let first = urls.first { model.chooseFolder(first) }
         else { model.chooseFiles(urls) }
     }
 

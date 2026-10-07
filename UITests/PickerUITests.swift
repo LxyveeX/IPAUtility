@@ -22,7 +22,7 @@ final class PickerUITests: XCTestCase {
         open.tap()
         XCTAssertTrue(app.staticTexts["ipaCount"].waitForExistence(timeout: 30),
                       "Tapping the real Open button must return to the app")
-        let sample = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Picker Sample")).firstMatch
+        let sample = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Picker Sample")).firstMatch
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
         attach("Native copy selection completed")
     }
@@ -41,7 +41,8 @@ final class PickerUITests: XCTestCase {
     func testLocalLibraryDoesNotRequireDocumentPicker() {
         app.buttons["localLibrary"].tap()
         XCTAssertTrue(app.staticTexts["ipaCount"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["Picker Sample.ipa"].firstMatch.waitForExistence(timeout: 15))
+        let sample = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Picker Sample.ipa")).firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 15))
         attach("Local IPA library")
     }
 

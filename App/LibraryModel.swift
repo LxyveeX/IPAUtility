@@ -373,7 +373,16 @@ final class LibraryModel: ObservableObject {
             ]
             for (label, url, type) in checks {
                 selfCheckReport += "\n\(label)：检测中…"
-                let result = await ThumbnailProbe().run(url: url, contentType: type)
+                // Each forced-type request gets a distinct URL so the system's
+                // result for an earlier request cannot be reused from its cache.
+                var probeURL = url
+                if type != nil {
+                    probeURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("thumbnail-probe-\(UUID().uuidString).ipa")
+                    try FileManager.default.copyItem(at: sample, to: probeURL)
+                }
+                let result = await ThumbnailProbe().run(url: probeURL, contentType: type)
+                if type != nil { try? FileManager.default.removeItem(at: probeURL) }
                 selfCheckReport += "\n\(result.message)\n"
                 if let image = result.image { selfCheckImages.append(image) }
             }
