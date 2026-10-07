@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 1.1：兼容万能签的 `sign.wnqapp.com.ipa` 类型；系统图标改用完整的独立 PNG。
+- 兼容 Apple IPA、万能签 IPA 和本 App 导出的 IPA 类型；其他应用的注册仍可能影响系统选择。
 - 复制导入一个或多个 IPA 到本地库，原文件保留。
 - 内置 Quick Look Thumbnail Extension，为系统“文件”中的 IPA 提供包内应用图标。
 - 缩略图由系统自动请求，无需选择文件或文件夹；本地库用于整理副本。
@@ -111,3 +111,12 @@ ZIPFoundation 0.9.20 已随工程附带，MIT 许可证位于 `Vendor/ZIPFoundat
 Lanerc 1.0.8 的主图标只有 `Assets.car` 内的 AppIcon，没有独立 PNG。已在本地解析并验证 1024×1024 图像；新增 CoreUI 专用图标查询用于 App 和扩展。仓库测试使用本项目自己的编译资源生成“仅 CAR”的 IPA，不包含用户上传的 IPA 或资源。
 
 后台图标恢复由 Xcode 编译生成的主 AppIcon 声明，资源名称更新为 `IPAUtilityIcon`，保留独立 PNG 供签名预览读取。新增系统 App Switcher 截图供人工核对；截图及模拟器检查不能证明 iPadOS 16.7 重签名后的结果，真机后台图标仍待确认。
+
+
+### 1.3 验证与交付
+
+2026-10-07 已通过真机 Release 编译、18 项功能测试和 3 项 iPad UI 测试，全部零失败。新增的仅 CAR 安装包同时通过 App 读取和系统 Quick Look 扩展调用，生成图像与源图标像素对比通过。复制导入 UI 实际生成第二份样本，未覆盖原文件。
+
+已人工查看系统多任务界面截图：应用卡片标题旁显示蓝色图标，Dock 也正常。该结果来自 iPad 模拟器；用户 iPadOS 16.7 上经重新签名后的后台图标，以及 Lanerc 实际文件的系统显示，仍需真机复测。
+
+构建记录：[Build IPAUtility](https://github.com/LxyveeX/IPAUtility/actions/runs/37630479429)。构建源码提交：`3b392c2ec915b8eca51f995c2245aaa5aa4b58ec`。版本 1.3 (5)，ARM64 主程序与扩展，最低 iOS 16.0。IPA SHA-256：`1bef006e5773d60fa7472627999162b4b0c6f1590b5b7c1b5096dc93063bd8d1`。
