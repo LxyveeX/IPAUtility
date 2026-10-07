@@ -204,11 +204,11 @@ final class IPAUtilityTests: XCTestCase {
         let controller = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
         let url = FileManager.default.temporaryDirectory
         var selections: [[URL]] = []
-        let selected = DocumentPicker.Coordinator { selections.append($0) }
+        let selected = DocumentPicker.SelectionDelegate { selections.append($0) }
         selected.documentPicker(controller, didPickDocumentsAt: [url])
         selected.documentPickerWasCancelled(controller)
         XCTAssertEqual(selections, [[url]])
-        let cancelled = DocumentPicker.Coordinator { selections.append($0) }
+        let cancelled = DocumentPicker.SelectionDelegate { selections.append($0) }
         cancelled.documentPickerWasCancelled(controller)
         cancelled.documentPickerWasCancelled(controller)
         XCTAssertEqual(selections, [[url], []])

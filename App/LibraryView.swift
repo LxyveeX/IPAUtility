@@ -259,7 +259,7 @@ struct DocumentPicker: UIViewControllerRepresentable {
         var directory: URL?
         var completed: ((PickerKind, [URL]) -> Void)?
         private var activeKind: PickerKind?
-        private var pickerDelegate: Coordinator?
+        private var pickerDelegate: SelectionDelegate?
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
@@ -277,7 +277,7 @@ struct DocumentPicker: UIViewControllerRepresentable {
             picker.shouldShowFileExtensions = true
             picker.directoryURL = directory
             picker.modalPresentationStyle = .formSheet
-            pickerDelegate = Coordinator { [weak self] urls in self?.finish(urls) }
+            pickerDelegate = SelectionDelegate { [weak self] urls in self?.finish(urls) }
             picker.delegate = pickerDelegate
             present(picker, animated: true)
             picker.presentationController?.delegate = self
@@ -298,7 +298,7 @@ struct DocumentPicker: UIViewControllerRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+    final class SelectionDelegate: NSObject, UIDocumentPickerDelegate {
         let completed: ([URL]) -> Void
         private var finished = false
         init(completed: @escaping ([URL]) -> Void) { self.completed = completed }
