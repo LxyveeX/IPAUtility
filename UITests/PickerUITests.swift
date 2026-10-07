@@ -38,15 +38,17 @@ final class PickerUITests: XCTestCase {
         attach("Native copy selection completed")
     }
 
-    func testNativeFolderPickerOpenButtonReturnsToLibrary() {
-        app.buttons["chooseFolder"].tap()
-        let open = app.buttons["Open"].firstMatch
-        XCTAssertTrue(open.waitForExistence(timeout: 30))
-        XCTAssertTrue(open.isEnabled)
-        open.tap()
-        XCTAssertTrue(app.staticTexts["ipaCount"].waitForExistence(timeout: 30),
-                      "Folder selection must complete through the real system UI")
-        attach("Native folder selection completed")
+    func testCaptureSystemAppSwitcherIcon() {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.999))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.wait(for: .runningForeground, timeout: 10))
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "App switcher — visual icon review required"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        // Foreground state alone does not prove the icon is correct; review the attachment.
     }
 
     func testLocalLibraryDoesNotRequireDocumentPicker() {

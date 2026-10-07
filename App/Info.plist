@@ -161,33 +161,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CFBundleIcons</key>
-	<dict>
-		<key>CFBundlePrimaryIcon</key>
-		<dict>
-			<key>CFBundleIconFiles</key>
-			<array>
-				<string>Icon60</string>
-				<string>Icon40</string>
-				<string>Icon29</string>
-				<string>Icon20</string>
-			</array>
-		</dict>
-	</dict>
-	<key>CFBundleIcons~ipad</key>
-	<dict>
-		<key>CFBundlePrimaryIcon</key>
-		<dict>
-			<key>CFBundleIconFiles</key>
-			<array>
-				<string>Icon83.5</string>
-				<string>Icon76</string>
-				<string>Icon60</string>
-				<string>Icon40</string>
-				<string>Icon29</string>
-				<string>Icon20</string>
-			</array>
-		</dict>
-	</dict>
 </dict>
 </plist>

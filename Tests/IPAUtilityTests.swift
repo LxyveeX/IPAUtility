@@ -214,18 +214,66 @@ final class IPAUtilityTests: XCTestCase {
         XCTAssertEqual(selections, [[url], []])
     }
 
-    func testSystemIconsExistAtSmallAndIPadSizes() throws {
+    func testCompiledPrimaryIconAndStandaloneResources() throws {
         for key in ["CFBundleIcons", "CFBundleIcons~ipad"] {
             let icons = try XCTUnwrap(Bundle.main.infoDictionary?[key] as? [String: Any])
             let primary = try XCTUnwrap(icons["CFBundlePrimaryIcon"] as? [String: Any])
-            XCTAssertNil(primary["CFBundleIconName"])
+            XCTAssertEqual(primary["CFBundleIconName"] as? String, "IPAUtilityIcon")
             let files = try XCTUnwrap(primary["CFBundleIconFiles"] as? [String])
-            XCTAssertTrue(Set(["Icon20", "Icon29", "Icon40"]).isSubset(of: Set(files)))
+            XCTAssertFalse(files.isEmpty)
+            let resources = Bundle.main.urls(forResourcesWithExtension: "png", subdirectory: nil) ?? []
             for name in files {
-                let url = try XCTUnwrap(Bundle.main.url(forResource: name + "@2x", withExtension: "png"))
+                let url = try XCTUnwrap(resources.first { $0.lastPathComponent.hasPrefix(name) })
                 XCTAssertNotNil(IconDecoder.image(try Data(contentsOf: url)))
             }
         }
+        for name in ["Icon20", "Icon29", "Icon40", "Icon76", "Icon83.5"] {
+            XCTAssertNotNil(Bundle.main.url(forResource: name + "@2x", withExtension: "png"))
+        }
+    }
+
+    func testCAROnlyIconAndSystemThumbnail() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let plistURL = folder.appendingPathComponent("Info.plist")
+        let plist: [String: Any] = ["CFBundleName": "Catalog Only", "CFBundleVersion": "1",
+                                   "CFBundleIdentifier": "test.catalog.only",
+                                   "CFBundleIcons": ["CFBundlePrimaryIcon": ["CFBundleIconName": "IPAUtilityIcon"]]]
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .binary, options: 0).write(to: plistURL)
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("catalog-only-\(UUID().uuidString).ipa")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let archive = try Archive(url: url, accessMode: .create)
+        try archive.addEntry(with: "Payload/Catalog.app/Info.plist", fileURL: plistURL)
+        try archive.addEntry(with: "Payload/Catalog.app/Assets.car",
+                             fileURL: XCTUnwrap(Bundle.main.url(forResource: "Assets", withExtension: "car")))
+        let info = try IPAReader.read(url)
+        XCTAssertEqual(info.iconSource, "Assets.car")
+        let expected = try XCTUnwrap(info.icon.flatMap { UIImage(data: $0) })
+        let done = expectation(description: "System renders a catalog-only IPA")
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 64, height: 64), scale: 1, representationTypes: .thumbnail)
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, error in
+            defer { done.fulfill() }
+            XCTAssertNil(error)
+            XCTAssertEqual(representation?.type, .thumbnail)
+            guard let result = representation?.uiImage else { XCTFail("Missing CAR thumbnail"); return }
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            func normalized(_ image: UIImage) -> UIImage {
+                UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32), format: format).image { _ in
+                    image.draw(in: CGRect(x: 0, y: 0, width: 32, height: 32))
+                }
+            }
+            guard let a = try? self.pixels(normalized(expected)), let b = try? self.pixels(normalized(result)) else {
+                XCTFail("Unreadable thumbnail pixels"); return
+            }
+            let difference = zip(a, b).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+            XCTAssertLessThan(Double(difference) / Double(a.count), 12, "Must match the catalog icon, not a document placeholder")
+            let attachment = XCTAttachment(image: result); attachment.name = "Catalog-only IPA thumbnail"
+            attachment.lifetime = .keepAlways; self.add(attachment)
+        }
+        wait(for: [done], timeout: 40)
+        QLThumbnailGenerator.shared.cancel(request)
     }
 
     private func pixels(_ image: UIImage) throws -> [UInt8] {

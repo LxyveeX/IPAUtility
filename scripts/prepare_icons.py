@@ -1,13 +1,13 @@
 """Copy all existing icon sizes as standalone PNG resources before XcodeGen.
 
-Info.plist references these files directly, including small iPad system icons.
-No asset catalog icon lookup is needed after a third-party tool re-signs the app.
+The primary icon uses the Xcode-compiled catalog. Keep these extra resources
+for IPA readers and signing previews that look for standalone PNGs.
 """
 from pathlib import Path
 import shutil
 
 root = Path(__file__).resolve().parents[1]
-source = root / 'App/Assets.xcassets/AppIcon.appiconset'
+source = root / 'App/Assets.xcassets/IPAUtilityIcon.appiconset'
 destination = root / 'App/IconFiles'
 destination.mkdir(exist_ok=True)
 for points, scales in [(20, [1, 2, 3]), (29, [1, 2, 3]), (40, [1, 2, 3]),

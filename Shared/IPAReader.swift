@@ -205,7 +205,7 @@ enum IPAReader {
             + (leaf.contains("~ipad") ? 500 : 0) + (leaf.contains("@3x") ? 100 : 0)
     }
 
-    // Public UIKit lookup for a resource-only bundle. No executable is extracted or loaded.
+    // Resource-only bundle. No executable is extracted or loaded.
     private static func assetCatalogIcon(_ archive: Archive, entry: Entry, plist: [String: Any], limit: Int) throws -> UIImage? {
         guard entry.uncompressedSize <= UInt64(limit) else { return nil }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".bundle")
@@ -231,6 +231,6 @@ enum IPAReader {
                 return IconDecoder.scaled(image, maximum: 256)
             }
         }
-        return nil
+        return IPAAssetCatalogIcon(carURL, iconNames(plist) + ["AppIcon", "Icon"])
     }
 }

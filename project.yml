@@ -8,8 +8,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1,2"
-    MARKETING_VERSION: "1.2"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "1.3"
+    CURRENT_PROJECT_VERSION: "5"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     SUPPORTS_MACCATALYST: NO
 targets:
@@ -27,8 +27,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility
         PRODUCT_NAME: IPAUtility
         INFOPLIST_FILE: App/Info.plist
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: IPAUtilityIcon
         GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OBJC_BRIDGING_HEADER: Shared/IPAAssetCatalogDecoder.h
     dependencies:
       - target: IPAThumbnail
         embed: true
@@ -47,6 +48,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility.thumbnail
         INFOPLIST_FILE: ThumbnailExtension/Info.plist
         GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OBJC_BRIDGING_HEADER: Shared/IPAAssetCatalogDecoder.h
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
     dependencies:

@@ -26,9 +26,9 @@ struct LibraryView: View {
                             Toggle("点击 App 时自动重命名", isOn: $model.autoRename).font(.subheadline)
                         } else {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("已获得这些 IPA 的读取权限。整理原文件名称时，请再授权所在文件夹。")
+                                Text("当前为原文件预览。导入本地库后，可以整理副本名称。")
                                     .font(.subheadline).foregroundStyle(.secondary)
-                                Button { picker = .folder } label: { Label("定位并授权所在文件夹", systemImage: "folder") }
+                                Button { Task { await model.importCopies(model.items.map(\.url)) } } label: { Label("导入这些 IPA 到本地库", systemImage: "square.and.arrow.down") }
                             }
                         }
                         if model.loading || model.busy {
@@ -46,17 +46,14 @@ struct LibraryView: View {
                             }
                         }
                     } else {
-                        emptyState(title: "把 IPA 整理得一目了然", subtitle: "选择“下载”中存放 IPA 的子文件夹。\n文件会保留在原位置。")
+                        emptyState(title: "文件图标，自动呈现", subtitle: "安装后回到系统“文件”查看 IPA 图标。\n需要整理名称时，再导入本地库。")
                         Button { picker = .importFiles } label: {
                             Label("导入 IPA（复制到本地库）", systemImage: "doc.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
                         }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("importIPA")
-                        Button { picker = .folder } label: {
-                            Label("选择 IPA 文件夹", systemImage: "folder.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
-                        }.buttonStyle(.bordered).controlSize(.large).accessibilityIdentifier("chooseFolder")
                         Button { model.openLocalLibrary() } label: {
                             Label("打开本地 IPA 库", systemImage: "tray.full").frame(maxWidth: .infinity)
                         }.accessibilityIdentifier("localLibrary")
-                        Text("本地库位于“文件 → 我的 iPad → IPA 图标 → IPA”。可先打开本地库，再用系统“文件”把 IPA 复制进去，返回这里刷新。文件夹模式用于整理原位置的文件。")
+                        Text("导入会保留原文件。本地副本位于“文件 → 我的 iPad → IPA 图标 → IPA”，也可以直接用系统“文件”复制进去。显示缩略图无需导入。")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }.padding(24).frame(maxWidth: 1200)
@@ -71,8 +68,6 @@ struct LibraryView: View {
                     Menu {
                         Button { picker = .importFiles } label: { Label("导入 IPA（复制到本地库）", systemImage: "square.and.arrow.down") }
                         Button { model.openLocalLibrary() } label: { Label("打开本地 IPA 库", systemImage: "tray.full") }
-                        Button { picker = .files } label: { Label("选择 IPA 文件（可多选）", systemImage: "doc.badge.plus") }
-                        Button { picker = .folder } label: { Label("选择 IPA 文件夹", systemImage: "folder.badge.plus") }
                     } label: { Image(systemName: "plus.circle") }.accessibilityLabel("选择 IPA").disabled(model.busy)
                     Menu {
                         Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
@@ -188,7 +183,7 @@ struct ItemDetail: View {
                         if model.canRename(current.url) {
                             Button { Task { await model.rename([current]) } } label: { Label("按名称＋版本号重命名", systemImage: "textformat.abc") }.disabled(model.busy)
                         } else {
-                            Text("原位置重命名：返回主页，点“定位并授权所在文件夹”。").font(.footnote).foregroundStyle(.secondary)
+                            Button { Task { let url = current.url; dismiss(); await model.importCopies([url]) } } label: { Label("导入到本地库整理", systemImage: "square.and.arrow.down") }.disabled(model.busy)
                         }
                         if !model.undoRecords.isEmpty {
                             Button { Task { await model.undo() } } label: { Label("撤销上次重命名", systemImage: "arrow.uturn.backward") }.disabled(model.busy)
@@ -321,13 +316,13 @@ struct HelpView: View {
             List {
                 Section("在系统“文件”里显示图标") {
                     Text("安装后先打开本 App 一次，再到“文件”查看 IPA。右上角菜单切换为“图标”视图，并开启“显示图标预览”（如果菜单提供）。")
-                    Text("缩略图由系统按需调用扩展生成。iCloud 中的 IPA 请先下载到本机。")
+                    Text("缩略图由系统按需生成，无需选择文件夹或导入本地库。iCloud 中的 IPA 请先下载到本机。")
                     Text("签名时请保留并签名 IPAThumbnail.appex。若签名工具有“移除插件 / 移除扩展”选项，请关闭。")
                 }
                 Section("自动整理名称") {
                     Text("“导入 IPA”会复制到本地库，原文件保持原样。若系统选择器无响应，先打开本地库，再从系统“文件”将 IPA 复制到“我的 iPad → IPA 图标 → IPA”，返回本 App 刷新。")
-                    Text("选择“下载”下的 IPA 文件夹。开启“点击 App 时自动重命名”后，点击本 App 中的应用卡片会改为“App 名称 版本号.ipa”。")
-                    Text("通过系统“打开方式”交给本 App 的 IPA，也会在已授权的文件夹内执行同样操作。系统选择其他打开方式时，需要手动选择 IPA 图标。")
+                    Text("在本地库开启“点击 App 时自动重命名”后，点击应用卡片会将副本改为“App 名称 版本号.ipa”。")
+                    Text("从系统“文件”打开的外部 IPA 会显示详情；需要重命名时，可在详情中导入到本地库。")
                     Text("同名文件加 (2)、(3) 等序号；文件内容不变。右上角菜单可批量整理、撤销上次重命名。")
                 }
                 Section("图标没有出现时") {
@@ -352,7 +347,7 @@ struct HelpView: View {
                     Text("部分 IPA 将图标放在特殊的 Assets.car 资源中，系统可能无法读取；详情会显示具体图标来源。")
                 }
                 Section {
-                    Text("IPA 图标 1.2 · iPadOS 16+").font(.footnote)
+                    Text("IPA 图标 1.3 · iPadOS 16+").font(.footnote)
                     Text("图标与应用信息在本机读取。IPA 内容不会上传。ZIP 读取使用 ZIPFoundation 0.9.20（MIT）。").font(.footnote).foregroundStyle(.secondary)
                 }
             }.navigationTitle("使用说明").navigationBarTitleDisplayMode(.inline)
