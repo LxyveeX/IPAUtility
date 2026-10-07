@@ -19,12 +19,12 @@
 
 ## 开始使用
 
-1. 下载 [已验证的 1.3 构建](https://github.com/LxyveeX/IPAUtility/actions/runs/37630479429) 中的 `IPAUtility-Unsigned` artifact，解压得到 IPA。
+1. 前往 [v1.3 Release](https://github.com/LxyveeX/IPAUtility/releases/tag/v1.3)，下载 `IPAUtility-v1.3-Unsigned.ipa`（未签名）。
 2. 使用自己的证书签名安装，保留并签名 `PlugIns/IPAThumbnail.appex` 缩略图扩展。
 3. 打开「IPA 图标」一次，再回到系统「文件」查看 IPA。云端文件先下载到本机；若视图提供「显示图标预览」，请开启。
 4. 需要整理文件名时，点击「导入 IPA」；本地库位于「文件 → 我的 iPad → IPA 图标 → IPA」。
 
-GitHub 构建附件保留 30 天；过期后可在 [Actions](https://github.com/LxyveeX/IPAUtility/actions/workflows/build.yml) 选择 `main`，手动运行 **Build IPAUtility** 重新生成。
+已验证安装包已归档至 Release，附有 SHA-256 校验文件、安装说明和版本记录。日常下载使用上方 Release；需要自行编译时，可在 [Actions](https://github.com/LxyveeX/IPAUtility/actions/workflows/build.yml) 选择 `main`，手动运行 **Build IPAUtility**。Actions 构建附件保留 30 天。
 
 ### 与签名工具共存
 
