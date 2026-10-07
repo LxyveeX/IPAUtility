@@ -1,0 +1,76 @@
+name: Publish verified IPAUtility v1.3
+
+on:
+  push:
+    branches: ['release/publish-v1.3']
+    paths: ['.github/workflows/publish-v1.3.yml']
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-ipautility-v1.3
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: LxyveeX/IPAUtility
+    steps:
+      - name: Download the tested build without rebuilding
+        run: |
+          set -euo pipefail
+          gh run download 37630479429 --name IPAUtility-Unsigned --dir downloaded
+          mkdir -p release
+          cp downloaded/IPAUtility-Unsigned.ipa release/IPAUtility-v1.3-Unsigned.ipa
+          printf '%s  %s\n' '1bef006e5773d60fa7472627999162b4b0c6f1590b5b7c1b5096dc93063bd8d1' 'IPAUtility-v1.3-Unsigned.ipa' > release/IPAUtility-v1.3-SHA256.txt
+          cd release
+          sha256sum --check IPAUtility-v1.3-SHA256.txt
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<'RELEASE_NOTES'
+          在 iPad 系统「文件」中显示 IPA 包内的应用图标，并在本地库整理名称与版本。
+          
+          ## 下载与安装
+          
+          下载下方 **IPAUtility-v1.3-Unsigned.ipa**，使用自己的证书签名安装；保留并签名 `PlugIns/IPAThumbnail.appex`。版本 **1.3 (5)**，最低系统 **iOS / iPadOS 16.0**。
+          
+          打开 App 一次后，回到「文件」查看图标。显示缩略图无需导入；复制导入用于整理本地副本，原文件保留。
+          
+          ## 本版内容
+          
+          - 补充 `Assets.car` 中专用 AppIcon 的读取。
+          - 保留正常的复制导入和本地库，移除原位置文件 / 文件夹选择入口。
+          - 支持「App 名称＋版本号」重命名、同名编号和撤销。
+          - 编译通过，18 项功能测试与 3 项界面测试全部通过。
+          
+          ## 真机状态
+          
+          在用户的 iPadOS 16.7 设备上，**先安装 IPAUtility，再安装签名工具**，可保持 IPA 缩略图正常显示。此安装顺序为该设备的实测经验。
+          
+          已知问题：后台小图标仍显示默认空白图标，个别 IPA 图标偏模糊。当前保留此版本，暂缓功能迭代。
+          
+          ## 构建与校验
+          
+          [已验证构建](https://github.com/LxyveeX/IPAUtility/actions/runs/37630479429) · 源码提交 `3b392c2ec915b8eca51f995c2245aaa5aa4b58ec`。附件与此前交付的 1.3 安装包完全一致。
+          
+          SHA-256：
+          ```text
+          1bef006e5773d60fa7472627999162b4b0c6f1590b5b7c1b5096dc93063bd8d1
+          ```
+          RELEASE_NOTES
+      - name: Publish v1.3 with the verified IPA and checksum
+        run: |
+          set -euo pipefail
+          gh release create v1.3 \
+            release/IPAUtility-v1.3-Unsigned.ipa \
+            release/IPAUtility-v1.3-SHA256.txt \
+            --target d2970be6dbf216e0812e00d4d69d1560db2eb033 \
+            --title 'IPA 图标 v1.3' \
+            --notes-file release-notes.md \
+            --latest
+          gh release view v1.3 --json url,isDraft,tagName,assets
