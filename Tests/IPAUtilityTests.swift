@@ -105,6 +105,10 @@ final class IPAUtilityTests: XCTestCase {
         try verifySystemThumbnail(contentType: XCTUnwrap(UTType("com.apple.itunes.ipa")))
     }
 
+    func testSystemGeneratesOwnedIPAThumbnail() throws {
+        try verifySystemThumbnail(contentType: XCTUnwrap(UTType("com.lxyvee.ipautility.ipa")))
+    }
+
     private func verifySystemThumbnail(contentType: UTType?) throws {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let url = documents.appendingPathComponent("thumbnail-integration-\(UUID().uuidString).ipa")
@@ -122,6 +126,13 @@ final class IPAUtilityTests: XCTestCase {
             let center = ((cg.height/2)*cg.width + cg.width/2)*4
             XCTAssertGreaterThan(Int(rgba[center+2]), Int(rgba[center])+40, "Expected the fixture's blue icon")
             XCTAssertGreaterThan(rgba[center+3], 240)
+            // A center-only assertion missed the white corners seen on iPadOS 16.7.
+            for (x, y) in [(2, 2), (cg.width-3, 2), (2, cg.height-3), (cg.width-3, cg.height-3)] {
+                let corner = (y * cg.width + x) * 4
+                XCTAssertGreaterThan(Int(rgba[corner+2]), Int(rgba[corner])+40,
+                                     "The source icon must fill all four corners; no white paper wedges")
+                XCTAssertGreaterThan(rgba[corner+3], 240)
+            }
             let attachment = XCTAttachment(image: image)
             attachment.name = "System-generated IPA thumbnail: \(contentType?.identifier ?? "automatic")"
             attachment.lifetime = .keepAlways
@@ -129,6 +140,31 @@ final class IPAUtilityTests: XCTestCase {
         }
         wait(for: [done], timeout: 40)
         QLThumbnailGenerator.shared.cancel(request)
+    }
+
+    @MainActor
+    func testCopyImportPreservesOriginalAndExistingCopy() async throws {
+        UserDefaults.standard.removeObject(forKey: "folderBookmark")
+        let model = LibraryModel()
+        let name = "import-\(UUID().uuidString).ipa"
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        let data = try Data(contentsOf: fixture("localized.ipa"))
+        try data.write(to: source)
+        let first = model.localLibraryURL.appendingPathComponent(name)
+        let second = model.localLibraryURL.appendingPathComponent(source.deletingPathExtension().lastPathComponent + " (2).ipa")
+        defer {
+            for url in [source, first, second] { try? FileManager.default.removeItem(at: url) }
+        }
+        await model.importCopies([source])
+        for _ in 0..<300 where model.loading { try await Task.sleep(nanoseconds: 20_000_000) }
+        await model.importCopies([source])
+        for _ in 0..<300 where model.loading { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertNil(model.message)
+        XCTAssertEqual(try Data(contentsOf: source), data)
+        XCTAssertEqual(try Data(contentsOf: first), data)
+        XCTAssertEqual(try Data(contentsOf: second), data)
+        XCTAssertEqual(model.folder, model.localLibraryURL)
+        XCTAssertTrue(model.canRename(first))
     }
 
     @MainActor

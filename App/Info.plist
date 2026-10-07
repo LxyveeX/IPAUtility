@@ -86,6 +86,29 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
+			<string>com.lxyvee.ipautility.ipa</string>
+			<key>UTTypeDescription</key>
+			<string>IPA 应用安装包</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.itunes.ipa</string>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ipa</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-ios-app</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
 			<string>com.lxyvee.ipautility.check</string>
 			<key>UTTypeDescription</key>
 			<string>IPA 图标检测</string>
@@ -113,6 +136,7 @@
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>com.lxyvee.ipautility.ipa</string>
 				<string>com.apple.itunes.ipa</string>
 				<string>sign.wnqapp.com.ipa</string>
 			</array>

@@ -22,7 +22,7 @@ struct LibraryView: View {
                         HStack(spacing: 10) {
                             Label(model.folder?.lastPathComponent ?? "已选中的文件", systemImage: model.folder == nil ? "doc.on.doc" : "folder.fill").lineLimit(1)
                             Spacer()
-                            Text("\(model.items.count) 个 IPA").foregroundStyle(.secondary)
+                            Text("\(model.items.count) 个 IPA").foregroundStyle(.secondary).accessibilityIdentifier("ipaCount")
                         }.font(.subheadline)
                         if model.folder != nil {
                             Toggle("点击 App 时自动重命名", isOn: $model.autoRename).font(.subheadline)
@@ -49,13 +49,16 @@ struct LibraryView: View {
                         }
                     } else {
                         emptyState(title: "把 IPA 整理得一目了然", subtitle: "选择“下载”中存放 IPA 的子文件夹。\n文件会保留在原位置。")
-                        Button { picker = .files } label: {
-                            Label("选择 IPA 文件（可多选）", systemImage: "doc.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
-                        }.buttonStyle(.borderedProminent).controlSize(.large)
+                        Button { picker = .importFiles } label: {
+                            Label("导入 IPA（复制到本地库）", systemImage: "doc.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
+                        }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("importIPA")
                         Button { picker = .folder } label: {
                             Label("选择 IPA 文件夹", systemImage: "folder.badge.plus").frame(maxWidth: .infinity).padding(.vertical, 7)
-                        }.buttonStyle(.bordered).controlSize(.large)
-                        Text("文件夹选择器：先点“浏览”，进入目标文件夹，再点右上角“打开”。若无响应，可直接选择 IPA 文件。")
+                        }.buttonStyle(.bordered).controlSize(.large).accessibilityIdentifier("chooseFolder")
+                        Button { model.openLocalLibrary() } label: {
+                            Label("打开本地 IPA 库", systemImage: "tray.full").frame(maxWidth: .infinity)
+                        }.accessibilityIdentifier("localLibrary")
+                        Text("本地库位于“文件 → 我的 iPad → IPA 图标 → IPA”。可先打开本地库，再用系统“文件”把 IPA 复制进去，返回这里刷新。文件夹模式用于整理原位置的文件。")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }.padding(24).frame(maxWidth: 1200)
@@ -68,6 +71,8 @@ struct LibraryView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Menu {
+                        Button { picker = .importFiles } label: { Label("导入 IPA（复制到本地库）", systemImage: "square.and.arrow.down") }
+                        Button { model.openLocalLibrary() } label: { Label("打开本地 IPA 库", systemImage: "tray.full") }
                         Button { picker = .files } label: { Label("选择 IPA 文件（可多选）", systemImage: "doc.badge.plus") }
                         Button { picker = .folder } label: { Label("选择 IPA 文件夹", systemImage: "folder.badge.plus") }
                     } label: { Image(systemName: "plus.circle") }.accessibilityLabel("选择 IPA").disabled(model.busy)
@@ -85,7 +90,7 @@ struct LibraryView: View {
             }
             .onChange(of: model.recursive) { _ in model.refresh() }
             .fullScreenCover(item: $picker, onDismiss: applySelection) { kind in
-                DocumentPicker(kind: kind, directory: model.suggestedFolder) { urls in
+                DocumentPicker(kind: kind, directory: model.suggestedFolder ?? model.localLibraryURL) { urls in
                     pickedKind = kind; pickedURLs = urls; picker = nil
                 }.ignoresSafeArea()
             }
@@ -103,7 +108,8 @@ struct LibraryView: View {
     private func applySelection() {
         let urls = pickedURLs; pickedURLs = []
         guard !urls.isEmpty else { return }
-        if pickedKind == .folder, let first = urls.first { model.chooseFolder(first) }
+        if pickedKind == .importFiles { Task { await model.importCopies(urls) } }
+        else if pickedKind == .folder, let first = urls.first { model.chooseFolder(first) }
         else { model.chooseFiles(urls) }
     }
 
@@ -229,7 +235,7 @@ struct ItemDetail: View {
 }
 
 enum PickerKind: String, Identifiable {
-    case folder, files
+    case folder, files, importFiles
     var id: String { rawValue }
 }
 
@@ -240,9 +246,9 @@ struct DocumentPicker: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(completed: completed) }
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         // .data keeps IPA files selectable even when another app registers a different UTI.
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: kind == .folder ? [.folder] : [.data], asCopy: false)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: kind == .folder ? [.folder] : [.data], asCopy: kind == .importFiles)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = kind == .files
+        picker.allowsMultipleSelection = kind != .folder
         picker.shouldShowFileExtensions = true
         picker.directoryURL = directory
         return picker
@@ -275,20 +281,34 @@ struct HelpView: View {
                     Text("签名时请保留并签名 IPAThumbnail.appex。若签名工具有“移除插件 / 移除扩展”选项，请关闭。")
                 }
                 Section("自动整理名称") {
-                    Text("文件夹选不了时，先用“选择 IPA 文件（可多选）”。立即读取图标和信息；主页的“定位并授权所在文件夹”会尝试定位到第一个 IPA 的目录，再由你确认授权。")
+                    Text("“导入 IPA”会复制到本地库，原文件保持原样。若系统选择器无响应，先打开本地库，再从系统“文件”将 IPA 复制到“我的 iPad → IPA 图标 → IPA”，返回本 App 刷新。")
                     Text("选择“下载”下的 IPA 文件夹。开启“点击 App 时自动重命名”后，点击本 App 中的应用卡片会改为“App 名称 版本号.ipa”。")
                     Text("通过系统“打开方式”交给本 App 的 IPA，也会在已授权的文件夹内执行同样操作。系统选择其他打开方式时，需要手动选择 IPA 图标。")
                     Text("同名文件加 (2)、(3) 等序号；文件内容不变。右上角菜单可批量整理、撤销上次重命名。")
                 }
                 Section("图标没有出现时") {
-                    Text("已适配万能签登记的 IPA 文件类型。若还显示默认图标，请选择一个 IPA，在详情中检测系统缩略图并分享检测结果。")
+                    Button { Task { await model.runSelfCheck() } } label: {
+                        Label("一键检测（无需选择文件）", systemImage: "checkmark.magnifyingglass")
+                    }.disabled(model.selfChecking).accessibilityIdentifier("selfCheck")
+                    if model.selfChecking { ProgressView("正在检测系统缩略图…") }
+                    if !model.selfCheckReport.isEmpty {
+                        Text(model.selfCheckReport).font(.footnote).textSelection(.enabled)
+                        ShareLink(item: model.selfCheckReport) { Label("分享检测结果", systemImage: "square.and.arrow.up") }
+                        ScrollView(.horizontal) {
+                            HStack {
+                                ForEach(Array(model.selfCheckImages.enumerated()), id: \.offset) { _, image in
+                                    Image(uiImage: image).resizable().scaledToFit().frame(width: 80, height: 80)
+                                }
+                            }
+                        }
+                    }
                     Text("先在 App 详情中检测系统缩略图。然后退出“文件”重新打开，或用下面的新样本排除旧缓存。")
                     Button { model.createSamples(); dismiss() } label: { Label("生成缩略图测试文件", systemImage: "doc.badge.plus") }
                     Text(".ipa 与 .ipacheck 是同一内容的两种扩展名。两者均应显示蓝色 App 图标；仅 .ipacheck 正常时，说明 IPA 文件类型关联可能被其他应用占用。测试文件仅用于查看图标。")
                     Text("部分 IPA 将图标放在特殊的 Assets.car 资源中，系统可能无法读取；详情会显示具体图标来源。")
                 }
                 Section {
-                    Text("IPA 图标 1.1 · iPadOS 16+").font(.footnote)
+                    Text("IPA 图标 1.2 · iPadOS 16+").font(.footnote)
                     Text("图标与应用信息在本机读取。IPA 内容不会上传。ZIP 读取使用 ZIPFoundation 0.9.20（MIT）。").font(.footnote).foregroundStyle(.secondary)
                 }
             }.navigationTitle("使用说明").navigationBarTitleDisplayMode(.inline)

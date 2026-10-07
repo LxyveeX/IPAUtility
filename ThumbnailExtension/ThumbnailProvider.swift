@@ -13,7 +13,8 @@ final class ThumbnailProvider: QLThumbnailProvider {
             let size = CGSize(width: edge, height: edge)
             handler(QLThumbnailReply(contextSize: size, currentContextDrawing: {
                 let rect = CGRect(origin: .zero, size: size)
-                UIBezierPath(roundedRect: rect, cornerRadius: edge * 0.215).addClip()
+                // Files composites clipped corners onto a white document background.
+                // Fill the entire content area with the original icon.
                 icon.draw(in: rect)
                 return true
             }), nil)

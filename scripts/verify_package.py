@@ -7,7 +7,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
     plugin=plistlib.loads(z.read(ext+'Info.plist'))
     config=plugin['NSExtension']
     assert config['NSExtensionPointIdentifier']=='com.apple.quicklook.thumbnail'
-    assert {'com.apple.itunes.ipa', 'sign.wnqapp.com.ipa'} <= set(config['NSExtensionAttributes']['QLSupportedContentTypes'])
+    assert {'com.apple.itunes.ipa', 'sign.wnqapp.com.ipa', 'com.lxyvee.ipautility.ipa'} <= set(config['NSExtensionAttributes']['QLSupportedContentTypes'])
     assert config['NSExtensionAttributes']['QLThumbnailMinimumDimension']==0
     assert plugin['CFBundleIdentifier'].startswith(app['CFBundleIdentifier']+'.')
     assert float(app['MinimumOSVersion'])<=16.7
@@ -20,5 +20,6 @@ with zipfile.ZipFile(sys.argv[1]) as z:
         assert {'Icon20', 'Icon29', 'Icon40'} <= set(icon['CFBundleIconFiles'])
         for name in icon['CFBundleIconFiles']:
             assert base + name + '@2x.png' in z.namelist(), 'Missing 2x icon: '+name
-    assert app['CFBundleShortVersionString'] == '1.1'
+    assert 'com.lxyvee.ipautility.ipa' in {x['UTTypeIdentifier'] for x in app['UTExportedTypeDeclarations']}
+    assert app['CFBundleShortVersionString'] == '1.2'
     print('IPA checked: standalone system icons, both IPA UTIs, thumbnail extension and iPadOS 16.7 compatibility.')

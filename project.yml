@@ -8,8 +8,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1,2"
-    MARKETING_VERSION: "1.1"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "1.2"
+    CURRENT_PROJECT_VERSION: "4"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     SUPPORTS_MACCATALYST: NO
 targets:
@@ -66,11 +66,22 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: IPAUtility
+  IPAUtilityUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lxyvee.ipautility.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: IPAUtility
+    dependencies:
+      - target: IPAUtility
 schemes:
   IPAUtility:
     build:
       targets:
         IPAUtility: all
     test:
-      targets: [IPAUtilityTests]
+      targets: [IPAUtilityTests, IPAUtilityUITests]
       gatherCoverageData: false

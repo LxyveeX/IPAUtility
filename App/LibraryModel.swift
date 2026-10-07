@@ -81,6 +81,9 @@ final class LibraryModel: ObservableObject {
     @Published var diagnosticImage: UIImage?
     @Published var diagnostic = ""
     @Published var checking = false
+    @Published var selfCheckReport = ""
+    @Published var selfCheckImages: [UIImage] = []
+    @Published var selfChecking = false
     @Published var autoRename: Bool { didSet { UserDefaults.standard.set(autoRename, forKey: "autoRename") } }
     @Published var recursive: Bool { didSet { UserDefaults.standard.set(recursive, forKey: "recursive") } }
     private var accessGranted = false
@@ -91,6 +94,10 @@ final class LibraryModel: ObservableObject {
     private var generation = UUID()
     var hasSource: Bool { folder != nil || !sourceFiles.isEmpty }
     var suggestedFolder: URL? { sourceFiles.first?.deletingLastPathComponent() ?? folder }
+    var localLibraryURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("IPA", isDirectory: true)
+    }
 
     func canRename(_ url: URL) -> Bool {
         guard let folder else { return false }
@@ -98,6 +105,20 @@ final class LibraryModel: ObservableObject {
     }
 
     init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestSeed") {
+            UserDefaults.standard.removeObject(forKey: "folderBookmark")
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let directory = docs.appendingPathComponent("IPA", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if let sample = Bundle.main.url(forResource: "ThumbnailSample", withExtension: "ipa") {
+                let destination = directory.appendingPathComponent("Picker Sample.ipa")
+                if !FileManager.default.fileExists(atPath: destination.path) {
+                    try? FileManager.default.copyItem(at: sample, to: destination)
+                }
+            }
+        }
+        #endif
         UserDefaults.standard.register(defaults: ["autoRename": true, "recursive": true])
         autoRename = UserDefaults.standard.bool(forKey: "autoRename")
         recursive = UserDefaults.standard.bool(forKey: "recursive")
@@ -277,6 +298,87 @@ final class LibraryModel: ObservableObject {
             }
             message = "已生成两个测试文件。请到“文件 → 我的 iPad → IPA 图标 → 缩略图测试”，切换为图标视图查看。两种扩展名都应显示蓝色 App 图标；对比它们可定位类型关联问题。"
         } catch { message = error.localizedDescription }
+    }
+
+    func openLocalLibrary() {
+        do {
+            try FileManager.default.createDirectory(at: localLibraryURL, withIntermediateDirectories: true)
+            chooseFolder(localLibraryURL)
+        } catch { message = error.localizedDescription }
+    }
+
+    func importCopies(_ urls: [URL]) async {
+        guard !busy, !urls.isEmpty else { return }
+        let files = urls.filter { $0.pathExtension.lowercased() == "ipa" }
+        guard !files.isEmpty else { message = "请选择 .ipa 文件。"; return }
+        busy = true
+        let destination = localLibraryURL
+        var errors: [String] = []
+        do {
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            for (index, source) in files.enumerated() {
+                progress = "正在导入 \(index + 1) / \(files.count)…"
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        let scoped = source.startAccessingSecurityScopedResource()
+                        defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+                        var readError: NSError?
+                        var copyResult: Result<Void, Error>?
+                        NSFileCoordinator().coordinate(readingItemAt: source, options: [], error: &readError) { url in
+                            copyResult = Result {
+                                let target = FileNaming.availableDestination(
+                                    source: destination.appendingPathComponent(UUID().uuidString),
+                                    desiredName: source.lastPathComponent)
+                                try FileManager.default.copyItem(at: url, to: target)
+                            }
+                        }
+                        if let readError { throw readError }
+                        guard let copyResult else { throw IPAError.invalid("文件未能读取。") }
+                        try copyResult.get()
+                    }.value
+                } catch { errors.append("\(source.lastPathComponent)：\(error.localizedDescription)") }
+            }
+        } catch { errors.append(error.localizedDescription) }
+        busy = false; progress = ""
+        openLocalLibrary()
+        if !errors.isEmpty { message = errors.prefix(5).joined(separator: "\n") }
+    }
+
+    func runSelfCheck() async {
+        guard !selfChecking else { return }
+        selfChecking = true; selfCheckImages = []
+        defer { selfChecking = false }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        selfCheckReport = "IPA 图标 \(version) · iPadOS \(UIDevice.current.systemVersion)\n"
+        do {
+            guard let sample = Bundle.main.url(forResource: "ThumbnailSample", withExtension: "ipa") else {
+                throw IPAError.invalid("缺少内置样本。")
+            }
+            let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("缩略图测试", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let name = "图标测试-\(version)-\(UUID().uuidString.prefix(8))"
+            let ipa = root.appendingPathComponent(name + ".ipa")
+            let control = root.appendingPathComponent(name + ".ipacheck")
+            try FileManager.default.copyItem(at: sample, to: ipa)
+            try FileManager.default.copyItem(at: sample, to: control)
+            let actual = (try? ipa.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier) ?? "未知"
+            let types = UTType.types(tag: "ipa", tagClass: .filenameExtension, conformingTo: nil).map(\.identifier)
+            selfCheckReport += "IPA 实际类型：\(actual)\nIPA 已登记类型：\(types.joined(separator: "、"))\n"
+            let checks: [(String, URL, String?)] = [
+                ("IPA 自动识别", ipa, nil), ("IPACHECK 对照", control, nil),
+                ("指定本 App 类型", ipa, "com.lxyvee.ipautility.ipa"),
+                ("指定万能签类型", ipa, "sign.wnqapp.com.ipa"),
+                ("指定 Apple IPA 类型", ipa, "com.apple.itunes.ipa")
+            ]
+            for (label, url, type) in checks {
+                selfCheckReport += "\n\(label)：检测中…"
+                let result = await ThumbnailProbe().run(url: url, contentType: type)
+                selfCheckReport += "\n\(result.message)\n"
+                if let image = result.image { selfCheckImages.append(image) }
+            }
+            selfCheckReport += "\n检测完成。以上指定类型请求用于定位；系统“文件”的最终显示以自动识别和实际浏览结果为准。"
+        } catch { selfCheckReport += "\n\(error.localizedDescription)" }
     }
 
     func checkThumbnail(_ url: URL) {
