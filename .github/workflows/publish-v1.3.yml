@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: publish-ipautility-v1.3
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
