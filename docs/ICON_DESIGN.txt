@@ -1,6 +1,6 @@
 Asset: IPAUtility app icon
 Generation: built-in image generation tool
-App assets: App/Assets.xcassets/AppIcon.appiconset
+App assets: App/Assets.xcassets/IPAUtilityIcon.appiconset
 Formatting: opaque RGB PNG; standard iPhone/iPad icon sizes generated from the selected artwork.
 
 Prompt:
