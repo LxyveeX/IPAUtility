@@ -8,6 +8,9 @@
 - (id)iconImageWithName:(NSString *)name scaleFactor:(double)scale
           displayGamut:(NSUInteger)gamut layoutDirection:(NSInteger)direction
            desiredSize:(CGSize)size;
+@end
+
+@protocol IPACatalogRendition <NSObject>
 - (CGImageRef)image;
 - (CGImageRef)unslicedImage;
 @end
@@ -15,9 +18,10 @@
 static UIImage *IPARenditionImage(id rendition) {
     if ([rendition isKindOfClass:UIImage.class]) { return rendition; }
     CGImageRef image = NULL;
-    if ([rendition respondsToSelector:@selector(image)]) { image = [rendition image]; }
+    id<IPACatalogRendition> bitmap = rendition;
+    if ([bitmap respondsToSelector:@selector(image)]) { image = [bitmap image]; }
     if (!image && [rendition respondsToSelector:@selector(unslicedImage)]) {
-        image = [rendition unslicedImage];
+        image = [bitmap unslicedImage];
     }
     if (!image || CGImageGetWidth(image) > 4096 || CGImageGetHeight(image) > 4096) { return nil; }
     return [UIImage imageWithCGImage:image];
