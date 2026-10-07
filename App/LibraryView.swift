@@ -87,14 +87,10 @@ struct LibraryView: View {
                 }
             }
             .onChange(of: model.recursive) { _ in model.refresh() }
-            .fullScreenCover(item: $picker) { kind in
-                DocumentPicker(kind: kind, directory: model.suggestedFolder ?? model.localLibraryURL) { urls in
-                    // UIDocumentPicker may finish its own dismissal before SwiftUI
-                    // observes these state updates. Consume the delegate's URLs here,
-                    // rather than handing them through an onDismiss state snapshot.
-                    picker = nil
+            .background {
+                DocumentPicker(kind: $picker, directory: model.suggestedFolder ?? model.localLibraryURL) { kind, urls in
                     applySelection(kind, urls: urls)
-                }.ignoresSafeArea()
+                }.frame(width: 0, height: 0)
             }
             .sheet(isPresented: $showHelp) { HelpView().environmentObject(model) }
             .sheet(item: $model.selected) { item in ItemDetail(item: item).environmentObject(model) }
@@ -241,20 +237,67 @@ enum PickerKind: String, Identifiable {
 }
 
 struct DocumentPicker: UIViewControllerRepresentable {
-    let kind: PickerKind
+    @Binding var kind: PickerKind?
     let directory: URL?
-    let completed: ([URL]) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(completed: completed) }
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        // .data keeps IPA files selectable even when another app registers a different UTI.
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: kind == .folder ? [.folder] : [.data], asCopy: kind == .importFiles)
-        picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = kind != .folder
-        picker.shouldShowFileExtensions = true
-        picker.directoryURL = directory
-        return picker
+    let completed: (PickerKind, [URL]) -> Void
+
+    func makeUIViewController(context: Context) -> Presenter { Presenter() }
+    func updateUIViewController(_ controller: Presenter, context: Context) {
+        controller.requestedKind = kind
+        controller.directory = directory
+        controller.completed = { selectedKind, urls in
+            kind = nil
+            completed(selectedKind, urls)
+        }
+        DispatchQueue.main.async { controller.presentIfNeeded() }
     }
-    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    // UIDocumentPicker owns a remote view controller. Present it using UIKit's
+    // modal lifecycle rather than making it the root of a SwiftUI full-screen cover.
+    final class Presenter: UIViewController, UIAdaptivePresentationControllerDelegate {
+        var requestedKind: PickerKind?
+        var directory: URL?
+        var completed: ((PickerKind, [URL]) -> Void)?
+        private var activeKind: PickerKind?
+        private var pickerDelegate: Coordinator?
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            presentIfNeeded()
+        }
+
+        func presentIfNeeded() {
+            guard let kind = requestedKind, activeKind == nil,
+                  viewIfLoaded?.window != nil, presentedViewController == nil else { return }
+            activeKind = kind
+            let picker = UIDocumentPickerViewController(
+                forOpeningContentTypes: kind == .folder ? [.folder] : [.data],
+                asCopy: kind == .importFiles)
+            picker.allowsMultipleSelection = kind != .folder
+            picker.shouldShowFileExtensions = true
+            picker.directoryURL = directory
+            picker.modalPresentationStyle = .formSheet
+            pickerDelegate = Coordinator { [weak self] urls in self?.finish(urls) }
+            picker.delegate = pickerDelegate
+            present(picker, animated: true)
+            picker.presentationController?.delegate = self
+        }
+
+        private func finish(_ urls: [URL]) {
+            guard let kind = activeKind else { return }
+            activeKind = nil
+            requestedKind = nil
+            pickerDelegate = nil
+            // Consume the actual delegate result before any dismissal callback.
+            completed?(kind, urls)
+            dismiss(animated: true)
+        }
+
+        func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+            finish([])
+        }
+    }
+
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
         let completed: ([URL]) -> Void
         private var finished = false

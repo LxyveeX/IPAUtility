@@ -14,6 +14,17 @@ final class PickerUITests: XCTestCase {
         app.buttons["importIPA"].tap()
         let file = app.descendants(matching: .any).matching(
             NSPredicate(format: "label BEGINSWITH %@", "Picker Sample")).firstMatch
+        if !file.waitForExistence(timeout: 10) {
+            // directoryURL is a starting-location hint. If Files chooses Recents,
+            // navigate through the real browser instead of assuming the hint won.
+            for label in ["Browse", "On My iPad", "IPA 图标", "IPA"] {
+                if file.exists { break }
+                let button = app.buttons[label].firstMatch
+                let text = app.staticTexts[label].firstMatch
+                if button.waitForExistence(timeout: 2), button.isHittable { button.tap() }
+                else if text.waitForExistence(timeout: 2), text.isHittable { text.tap() }
+            }
+        }
         XCTAssertTrue(file.waitForExistence(timeout: 30), "The native picker should show the seeded file")
         file.tap()
         let open = app.buttons["Open"].firstMatch
@@ -22,8 +33,8 @@ final class PickerUITests: XCTestCase {
         open.tap()
         XCTAssertTrue(app.staticTexts["ipaCount"].waitForExistence(timeout: 30),
                       "Tapping the real Open button must return to the app")
-        let sample = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Picker Sample")).firstMatch
-        XCTAssertTrue(sample.waitForExistence(timeout: 15))
+        let sample = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Picker Sample (2).ipa")).firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 15), "The selected file must actually be copied into the library")
         attach("Native copy selection completed")
     }
 
